@@ -25,6 +25,7 @@ wasmtime-environ = "20.0.2"
 hex = "0.4.3"
 protobuf = "3"
 reqwest = { version = "0.12.15", features = ["blocking"]}
+signal-hook = "0.3"
 
 [build-dependencies]
 protobuf-codegen = "3.4.0"

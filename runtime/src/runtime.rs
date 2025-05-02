@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use wasmtime::{Caller, Linker, Store, StoreLimits, StoreLimitsBuilder};
+use crate::signal::{init_signal_handler, should_exit};
 
 fn lock_err<T>(err: std::sync::PoisonError<T>) -> anyhow::Error {
     anyhow!("Mutex lock error: {}", err)
@@ -219,6 +220,7 @@ where
     T: Clone + 'static,
 {
     pub fn load(indexer: PathBuf, store: T) -> Result<Self> {
+        init_signal_handler();
         // Configure the engine with default settings
         let mut async_config = wasmtime::Config::default();
         async_config.consume_fuel(true);
@@ -1372,6 +1374,10 @@ where
                     println!("WASM requested POST to URL: {}", url);
         
                     loop {
+                        if should_exit() {
+                            println!("Exiting __post_json...");
+                            break;
+                        }
                         match reqwest::blocking::Client::new()
                             .post(&url)
                             .header("Content-Type", "application/json")
@@ -1390,7 +1396,7 @@ where
                             }
                         }
                         // Sleep a short time before retrying
-                        std::thread::sleep(std::time::Duration::from_secs(1));
+                        std::thread::sleep(std::time::Duration::from_secs(3));
                     }
                 },
             )

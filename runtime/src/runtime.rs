@@ -1320,6 +1320,83 @@ where
             )
             .map_err(|e| anyhow!("Failed to wrap __get_len: {:?}", e))?;
 
+            linker
+            .func_wrap(
+                "env",
+                "__post_json",
+                move |mut caller: Caller<'_, State>, url_ptr: i32, url_len: i32, body_ptr: i32, body_len: i32| {
+                    let mem = match caller.get_export("memory") {
+                        Some(export) => match export.into_memory() {
+                            Some(memory) => memory,
+                            None => {
+                                caller.data_mut().had_failure = true;
+                                return;
+                            }
+                        },
+                        None => {
+                            caller.data_mut().had_failure = true;
+                            return;
+                        }
+                    };
+        
+                    let data = mem.data(&caller);
+        
+                    let bounds_check = |ptr: i32, len: i32| -> bool {
+                        ptr >= 0 && len >= 0 && (ptr as usize + len as usize) <= data.len()
+                    };
+        
+                    if !bounds_check(url_ptr, url_len) || !bounds_check(body_ptr, body_len) {
+                        caller.data_mut().had_failure = true;
+                        return;
+                    }
+        
+                    let url_bytes = &data[url_ptr as usize..(url_ptr + url_len) as usize];
+                    let body_bytes = &data[body_ptr as usize..(body_ptr + body_len) as usize];
+        
+                    let url = match std::str::from_utf8(url_bytes) {
+                        Ok(u) => u.to_string(),
+                        Err(_) => {
+                            caller.data_mut().had_failure = true;
+                            return;
+                        }
+                    };
+        
+                    let body = match std::str::from_utf8(body_bytes) {
+                        Ok(b) => b.to_string(),
+                        Err(_) => {
+                            caller.data_mut().had_failure = true;
+                            return;
+                        }
+                    };
+        
+                    println!("WASM requested POST to URL: {}", url);
+        
+                    loop {
+                        match reqwest::blocking::Client::new()
+                            .post(&url)
+                            .header("Content-Type", "application/json")
+                            .body(body.clone())
+                            .send()
+                        {
+                            Ok(resp) if resp.status().is_success() => {
+                                println!("POST to {} succeeded", url);
+                                break;
+                            }
+                            Ok(resp) => {
+                                eprintln!("POST to {} failed with status {}, retrying...", url, resp.status());
+                            }
+                            Err(err) => {
+                                eprintln!("POST to {} error: {}, retrying...", url, err);
+                            }
+                        }
+                        // Sleep a short time before retrying
+                        std::thread::sleep(std::time::Duration::from_secs(1));
+                    }
+                },
+            )
+            .map_err(|e| anyhow!("Failed to wrap __post_json: {:?}", e))?;
+        
+
         Ok(())
     }
 }

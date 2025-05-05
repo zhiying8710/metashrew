@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use wasmtime::{Caller, Linker, Store, StoreLimits, StoreLimitsBuilder};
 use crate::signal::{init_signal_handler, should_exit};
+use serde_json::Value;
 
 fn lock_err<T>(err: std::sync::PoisonError<T>) -> anyhow::Error {
     anyhow!("Mutex lock error: {}", err)
@@ -449,6 +450,28 @@ where
             None => Ok(height),
         }
     }
+
+    pub fn parse_height_from_json(body: &str) -> Result<u32> {
+        let json: Value = serde_json::from_str(body)
+            .map_err(|e| anyhow!("Failed to parse JSON: {}", e))?;
+        
+        let current_height = json["current"]["height"]
+            .as_u64()
+            .ok_or_else(|| anyhow!("Failed to get current height from JSON"))?;
+        
+        Ok(current_height as u32)
+    }
+    
+    pub fn check_reorg_from_json(
+        context: Arc<Mutex<MetashrewRuntimeContext<T>>>,
+        body: &str,
+    ) -> Result<bool> {
+        let current_height = Self::parse_height_from_json(body)?;
+        let latest = Self::check_latest_block_for_reorg(context.clone(), current_height)?;
+        
+        Ok(latest != current_height)
+    }
+    
 
     pub fn db_length_at_key(
         context: Arc<Mutex<MetashrewRuntimeContext<T>>>,
@@ -1126,6 +1149,7 @@ where
         let context_ref = context.clone();
         let context_get = context.clone();
         let context_get_len = context.clone();
+        let context_check_reorg = context.clone();
         
         linker
             .func_wrap(
@@ -1401,6 +1425,10 @@ where
                         }
                         if should_exit() {
                             println!("Exiting __post_json...");
+                            break;
+                        }
+                        if Self::check_reorg_from_json(context_check_reorg.clone(), &body).unwrap_or(false) {
+                            println!("Reorg detected, exiting __post_json...");
                             break;
                         }
                         println!("Retrying POST to {}", url);

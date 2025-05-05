@@ -1373,14 +1373,10 @@ where
                     };
         
                     println!("WASM requested POST to URL: {}", url);
-        
+                    let client = reqwest::blocking::Client::new();
                     loop {
-                        if should_exit() {
-                            println!("Exiting __post_json...");
-                            break;
-                        }
-        
-                        match reqwest::blocking::Client::new()
+                        println!("Sending POST request to {}", url);
+                        match client
                             .post(&url)
                             .header("Content-Type", "application/json")
                             .body(body.clone())
@@ -1397,6 +1393,11 @@ where
                                 eprintln!("POST to {} error: {}, retrying...", url, err);
                             }
                         }
+                        if should_exit() {
+                            println!("Exiting __post_json...");
+                            break;
+                        }
+                        println!("Retrying POST to {}", url);
                         // Sleep a short time before retrying
                         std::thread::sleep(std::time::Duration::from_secs(3));
                     }

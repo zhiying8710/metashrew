@@ -1385,15 +1385,18 @@ where
                             .body(body.clone())
                             .send()
                         {
-                            Ok(resp) if resp.status().is_success() => {
-                                println!("POST to {} succeeded", url);
-                                break;
-                            }
                             Ok(resp) => {
-                                eprintln!("POST to {} failed with status {}, retrying...", url, resp.status());
+                                let status = resp.status();
+                                if status.as_u16() == 200 {
+                                    println!("POST to {} succeeded with status {}", url, status);
+                                    break;
+                                } else {
+                                    let response_text = resp.text().unwrap_or_else(|_| "Failed to read response text".to_string());
+                                    eprintln!("POST to {} failed with status {}: {}", url, status, response_text);
+                                }
                             }
                             Err(err) => {
-                                eprintln!("POST to {} error: {}, retrying...", url, err);
+                                eprintln!("POST to {} error: {:?}", url, err);
                             }
                         }
                         if should_exit() {

@@ -1126,6 +1126,7 @@ where
         let context_ref = context.clone();
         let context_get = context.clone();
         let context_get_len = context.clone();
+        let context_post_json = context.clone();
         
         linker
             .func_wrap(
@@ -1327,6 +1328,24 @@ where
                 "env",
                 "__post_json",
                 move |mut caller: Caller<'_, State>, url_ptr: i32, url_len: i32, body_ptr: i32, body_len: i32| {
+                    // Get initial block height and hash
+                    let (_, initial_hash) = match context_post_json.clone().lock() {
+                        Ok(ctx) => {
+                            let height = ctx.height;
+                            match Self::db_value_at_block(context.clone(), &vec![0], height) {
+                                Ok(hash) => (height, hash),
+                                Err(_) => {
+                                    caller.data_mut().had_failure = true;
+                                    return;
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            caller.data_mut().had_failure = true;
+                            return;
+                        }
+                    };
+                    
                     let mem = match caller.get_export("memory") {
                         Some(export) => match export.into_memory() {
                             Some(memory) => memory,
@@ -1378,6 +1397,29 @@ where
                             println!("Exiting __post_json...");
                             break;
                         }
+
+                        // Check for block reorganization by comparing hashes
+                        let current_hash = match context_post_json.clone().lock() {
+                            Ok(ctx) => {
+                                match Self::db_value_at_block(context.clone(), &vec![0], ctx.height) {
+                                    Ok(hash) => hash,
+                                    Err(_) => {
+                                        caller.data_mut().had_failure = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                caller.data_mut().had_failure = true;
+                                break;
+                            }
+                        };
+                        
+                        if current_hash != initial_hash {
+                            println!("Block reorganization detected (hash mismatch), exiting __post_json...");
+                            break;
+                        }
+        
                         match reqwest::blocking::Client::new()
                             .post(&url)
                             .header("Content-Type", "application/json")

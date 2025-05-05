@@ -1373,7 +1373,10 @@ where
                     };
         
                     println!("WASM requested POST to URL: {}", url);
-                    let client = reqwest::blocking::Client::new();
+                    let client = reqwest::blocking::Client::builder()
+                        .timeout(std::time::Duration::from_secs(180))
+                        .build()
+                        .unwrap();
                     loop {
                         println!("Sending POST request to {}", url);
                         match client

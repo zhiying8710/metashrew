@@ -469,7 +469,7 @@ where
         let current_height = Self::parse_height_from_json(body)?;
         let latest = Self::check_latest_block_for_reorg(context.clone(), current_height)?;
 
-        Ok(latest - 1 != current_height)
+        Ok(!(current_height == latest || current_height == latest - 1))
     }
     
 

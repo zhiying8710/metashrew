@@ -468,8 +468,8 @@ where
     ) -> Result<bool> {
         let current_height = Self::parse_height_from_json(body)?;
         let latest = Self::check_latest_block_for_reorg(context.clone(), current_height)?;
-        println!("[xxxx] Latest block height: {}, current height: {}", latest, current_height);
-        Ok(latest != current_height)
+
+        Ok(latest - 1 != current_height)
     }
     
 
